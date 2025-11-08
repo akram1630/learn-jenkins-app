@@ -3,12 +3,13 @@ pipeline {
 
     stages {
         stage('Build') {
-            agent{ 
-                docker{
-                    image 'node:18-alpine'
-                    reuseNode true
-                } 
-            }
+          // Docker agent removed because Jenkins container has Node
+            // agent{ 
+            //     docker{
+            //         image 'node:18-alpine'
+            //         reuseNode true
+            //     } 
+            // }
             steps {
                 sh '''
                     ls -la
