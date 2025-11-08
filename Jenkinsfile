@@ -4,12 +4,12 @@ pipeline {
     stages {
         stage('Build') {
             //codespace ide has node already
-            // agent{
-            //     docker{
-            //         image 'node:18-alpine'
-            //         reuseNode true
-            //     }
-            // }
+            agent{
+                docker{
+                    image 'node:18-alpine'
+                    reuseNode true
+                }
+            }
             steps {
                 sh '''
                     ls -la
