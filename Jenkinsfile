@@ -8,18 +8,17 @@ pipeline {
     stages {
 
         stage('Build') {
-            // agent {
-            //     docker {
-            //         image 'node:18-alpine'
-            //         reuseNode true
-            //     }
-            // }
             steps {
                 sh '''
+                    echo "Listing project files"
                     ls -la
+                    echo "Node version:"
                     node --version
+                    echo "NPM version:"
                     npm --version
+                    echo "Installing dependencies"
                     npm ci
+                    echo "Building project"
                     npm run build
                     ls -la
                 '''
@@ -28,38 +27,34 @@ pipeline {
 
         stage('Tests') {
             parallel {
+
                 stage('Unit tests') {
-                    // agent {
-                    //     docker {
-                    //         image 'node:18-alpine'
-                    //         reuseNode true
-                    //     }
-                    // }
                     steps {
                         sh '''
-                            # test -f build/index.html
+                            # Create test-results folder
+                            mkdir -p test-results
+                            echo "Running unit tests"
                             npm test
                         '''
                     }
                     post {
                         always {
-                            junit 'jest-results/junit.xml'
+                            junit 'test-results/junit.xml'
                         }
                     }
                 }
 
                 stage('E2E') {
-                    agent {
-                         docker {
-                             image 'mcr.microsoft.com/playwright:v1.39.0-jammy'
-                             reuseNode true
-                         }
-                    }
                     steps {
                         sh '''
-                            npm install serve
+                            echo "Installing Playwright and serve"
+                            npm install --save-dev playwright serve
+                            echo "Installing Playwright browsers"
+                            npx playwright install
+                            echo "Starting static server"
                             node_modules/.bin/serve -s build &
                             sleep 10
+                            echo "Running Playwright E2E tests"
                             npx playwright test --reporter=html
                         '''
                     }
@@ -73,7 +68,6 @@ pipeline {
                                 reportDir: 'playwright-report', 
                                 reportFiles: 'index.html', 
                                 reportName: 'Playwright HTML Report', 
-                                reportTitles: '', 
                                 useWrapperFileDirectly: true
                             ])
                         }
@@ -83,14 +77,9 @@ pipeline {
         }
 
         stage('Deploy') {
-            // agent {
-            //     docker {
-            //         image 'node:18-alpine'
-            //         reuseNode true
-            //     }
-            // }
             steps {
                 sh '''
+                    echo "Installing Netlify CLI"
                     npm install netlify-cli@20.1.1
                     node_modules/.bin/netlify --version
                     echo "Deploying to production. Site ID: $NETLIFY_SITE_ID"
