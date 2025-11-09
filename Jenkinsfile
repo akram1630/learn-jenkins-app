@@ -10,7 +10,6 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                // Using bash explicitly to avoid Jenkins durabletask freeze
                 sh '''#!/bin/bash -e
                     echo "=== BUILD STAGE STARTED ==="
                     set -x
@@ -19,7 +18,6 @@ pipeline {
                     node --version
                     npm --version
 
-                    # Clean install - quiet + safe
                     npm ci --no-fund --no-audit --progress=false || exit 1
 
                     echo "Running build..."
@@ -42,7 +40,6 @@ pipeline {
                         exit 1
                     fi
 
-                    # Run tests if any (avoid freezing)
                     npm test --if-present --silent || echo "⚠️ No tests found."
                     echo "=== TEST STAGE COMPLETE ==="
                 '''
@@ -53,8 +50,12 @@ pipeline {
             steps {
                 sh '''#!/bin/bash -e
                     echo "=== DEPLOY STAGE STARTED ==="
-                    npm install -g netlify-cli --no-fund --no-audit --progress=false || exit 1
-                    netlify --version
+                    # Install Netlify CLI locally (no root required)
+                    npm install netlify-cli --no-fund --no-audit --progress=false || exit 1
+
+                    # Run via npx to use local binary
+                    npx netlify --version
+
                     echo "✅ Netlify CLI installed successfully."
                 '''
             }
