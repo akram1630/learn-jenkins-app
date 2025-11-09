@@ -1,78 +1,89 @@
 pipeline {
     agent any
 
-    options {
-        timestamps()
-        disableConcurrentBuilds()
-        durabilityHint('PERFORMANCE_OPTIMIZED')
-    }
-
     stages {
-        stage('Build') {
-            steps {
-                sh '''#!/bin/bash -e
-                    echo "=== BUILD STAGE STARTED ==="
-                    set -x
 
+        stage('Build') {
+            // agent {
+            //     docker {
+            //         image 'node:18-alpine'
+            //         reuseNode true
+            //     }
+            // }
+            steps {
+                sh '''
                     ls -la
                     node --version
                     npm --version
-
-                    npm ci --no-fund --no-audit --progress=false || exit 1
-
-                    echo "Running build..."
-                    npm run build --if-present || exit 1
-
-                    echo "=== BUILD COMPLETE ==="
-                    ls -la build || echo "⚠️ Build folder missing"
+                    npm ci
+                    npm run build
+                    ls -la
                 '''
             }
         }
 
-        stage('Test') {
-            steps {
-                sh '''#!/bin/bash -e
-                    echo "=== TEST STAGE STARTED ==="
-                    if [ -f build/index.html ]; then
-                        echo "✅ Build output exists."
-                    else
-                        echo "❌ Build output missing!"
-                        exit 1
-                    fi
+        stage('Tests') {
+            parallel {
+                stage('Unit tests') {
+                    // agent {
+                    //     docker {
+                    //         image 'node:18-alpine'
+                    //         reuseNode true
+                    //     }
+                    // }
 
-                    npm test --if-present --silent || echo "⚠️ No tests found."
-                    echo "=== TEST STAGE COMPLETE ==="
-                '''
+                    steps {
+                        sh '''
+                            #test -f build/index.html
+                            npm test
+                        '''
+                    }
+                    post {
+                        always {
+                            junit 'jest-results/junit.xml'
+                        }
+                    }
+                }
+
+                stage('E2E') {
+                    // agent {
+                    //     docker {
+                    //         image 'mcr.microsoft.com/playwright:v1.39.0-jammy'
+                    //         reuseNode true
+                    //     }
+                    // }
+
+                    steps {
+                        sh '''
+                            npm install serve
+                            node_modules/.bin/serve -s build &
+                            sleep 10
+                            npx playwright test  --reporter=html
+                        '''
+                    }
+
+                    post {
+                        always {
+                            publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: 'playwright-report', reportFiles: 'index.html', reportName: 'Playwright HTML Report', reportTitles: '', useWrapperFileDirectly: true])
+                        }
+                    }
+                }
             }
         }
 
         stage('Deploy') {
+            // agent {
+            //     docker {
+            //         image 'node:18-alpine'
+            //         reuseNode true
+            //     }
+            // }
             steps {
-                sh '''#!/bin/bash -e
-                    echo "=== DEPLOY STAGE STARTED ==="
-                    # Install Netlify CLI locally (no root required)
-                    npm install netlify-cli --no-fund --no-audit --progress=false || exit 1
-
-                    # Run via npx to use local binary
-                    npx netlify --version
-
-                    echo "✅ Netlify CLI installed successfully."
+                sh '''
+                    npm install netlify-cli@20.1.1
+                    node_modules/.bin/netlify --version
                 '''
             }
-        }
-    }
-
-    post {
-        always {
-            echo "=== POST BUILD ACTIONS ==="
-            sh 'mkdir -p test-results'
-            junit allowEmptyResults: true, testResults: 'test-results/**/*.xml'
-        }
-        success {
-            echo "✅ Pipeline completed successfully!"
-        }
-        failure {
-            echo "❌ Pipeline failed. Check logs above."
         }
     }
 }
