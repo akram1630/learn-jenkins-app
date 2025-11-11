@@ -31,7 +31,6 @@ pipeline {
                 stage('Unit tests') {
                     steps {
                         sh '''
-                            # Create test-results folder
                             mkdir -p test-results
                             echo "Running unit tests"
                             npm test
@@ -61,14 +60,14 @@ pipeline {
 
                     post {
                         always {
+                            // Requires HTML Publisher Plugin
                             publishHTML([
-                                allowMissing: false, 
-                                alwaysLinkToLastBuild: false, 
+                                allowMissing: true, 
+                                alwaysLinkToLastBuild: true, 
                                 keepAll: false, 
                                 reportDir: 'playwright-report', 
                                 reportFiles: 'index.html', 
-                                reportName: 'Playwright HTML Report', 
-                                useWrapperFileDirectly: true
+                                reportName: 'Playwright HTML Report'
                             ])
                         }
                     }
@@ -83,6 +82,7 @@ pipeline {
                     npm install netlify-cli@20.1.1
                     node_modules/.bin/netlify --version
                     echo "Deploying to production. Site ID: $NETLIFY_SITE_ID"
+                    node_modules/.bin/netlify deploy --dir=build --site=$NETLIFY_SITE_ID --prod --auth=$NETLIFY_AUTH_TOKEN
                 '''
             }
         }
