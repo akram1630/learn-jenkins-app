@@ -59,18 +59,10 @@ pipeline {
                     }
 
                     post {
-                        always {
-                            // Requires HTML Publisher Plugin
-                            publishHTML([
-                                allowMissing: true, 
-                                alwaysLinkToLastBuild: true, 
-                                keepAll: false, 
-                                reportDir: 'playwright-report', 
-                                reportFiles: 'index.html', 
-                                reportName: 'Playwright HTML Report'
-                            ])
-                        }
-                    }
+    always {
+        echo "Playwright report available in playwright-report directory."
+    }
+}
                 }
             }
         }
