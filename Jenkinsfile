@@ -1,32 +1,26 @@
 pipeline {
     agent any
-
     environment {
         NETLIFY_SITE_ID = 'e77c23c2-8db7-4ad2-a790-1ce450294ca1'
-    }
-
-    options {
-        skipDefaultCheckout(false)
-        disableConcurrentBuilds()
+        NETLIFY_AUTH_TOKEN = credentials('netlify-token')
     }
 
     stages {
-
-        stage('Cleanup') {
-            steps {
-                echo "Cleaning workspace and re-checking out code..."
-                deleteDir()
-                checkout scm
-            }
-        }
-
         stage('Build') {
+            // agent {
+            //     docker {
+            //         image 'node:18-alpine'
+            //         reuseNode true
+            //         args '--user root'  // Run as root to avoid permission issues
+            //     }
+            // }
             steps {
                 sh '''
-                    echo "=== BUILD STAGE ==="
                     ls -la
                     node --version
                     npm --version
+                    # Clean node_modules to avoid permission issues
+                    rm -rf node_modules
                     npm ci
                     npm run build
                     ls -la
@@ -37,46 +31,74 @@ pipeline {
         stage('Tests') {
             parallel {
                 stage('Unit tests') {
+                    // agent {
+                    //     docker {
+                    //         image 'node:18-alpine'
+                    //         reuseNode true
+                    //         args '--user root'  // Run as root to avoid permission issues
+                    //     }
+                    // }
+
                     steps {
                         sh '''
-                            echo "=== UNIT TESTS ==="
-                            npm test || echo "Tests failed but continuing..."
+                            # Install jest-junit if not already present
+                            npm list jest-junit  npm install --save-dev jest-junit
+                            
+                            # Run tests - they should automatically generate test-results/junit.xml
+                            npm test -- --ci --watchAll=false
+                            
+                            # Check if the junit.xml file was created
+                            ls -la test-results/  echo "test-results directory not found"
+                            ls -la test-results/junit.xml  echo "junit.xml file not found"
                         '''
                     }
                     post {
                         always {
-                            junit 'jest-results/junit.xml'
+                            // Update the path to match where your junit.xml is actually located
+                            junit 'test-results/junit.xml'
                         }
                     }
                 }
 
                 stage('E2E') {
-                    agent {
-                        docker {
-                            image 'mcr.microsoft.com/playwright:v1.39.0-jammy'
-                            reuseNode true
-                        }
-                    }
+                    // agent {
+                    //     docker {
+                    //         image 'mcr.microsoft.com/playwright:v1.39.0-jammy'
+                    //         reuseNode true
+                    //         args '--ipc=host --user root'  // Add IPC host and run as root
+                    //     }
+                    // }
+
                     steps {
                         sh '''
-                            echo "=== E2E TESTS ==="
-                            npm install serve
-                            nohup npx serve -s build > serve.log 2>&1 &
+                            # Install serve if not present
+                            npm list serve  npm install serve
+                            
+                            # Start the server in background
+                            node_modules/.bin/serve -s build -p 3000 &
+                            SERVE_PID=$!
+                            echo "Server started with PID: $SERVE_PID"
+                            
+                            # Wait for server to start
                             sleep 10
-                            npx playwright install --with-deps
+                            
+                            # Test if server is responding
+                            curl -f http://localhost:3000
+                            
+                            # Run Playwright tests
                             npx playwright test --reporter=html
+                            
+                            # Kill the server
+                            kill $SERVE_PID
                         '''
                     }
-                    post {
+
+post {
                         always {
-                            publishHTML([
-                                allowMissing: false,
-                                alwaysLinkToLastBuild: false,
-                                keepAll: false,
-                                reportDir: 'playwright-report',
-                                reportFiles: 'index.html',
-                                reportName: 'Playwright HTML Report'
-                            ])
+                            // Use archiveArtifacts instead of publishHTML since the plugin is not installed
+                            archiveArtifacts artifacts: 'playwright-report//*'
+                            // Alternative: just archive the HTML file
+                            archiveArtifacts artifacts: 'playwright-report/index.html'
                         }
                     }
                 }
@@ -84,18 +106,39 @@ pipeline {
         }
 
         stage('Deploy') {
+            // agent {
+            //     docker {
+            //         image 'node:18-alpine'
+            //         reuseNode true
+            //         args '--user root'  // Run as root to avoid permission issues
+            //     }
+            // }
             steps {
                 sh '''
-                    echo "=== DEPLOY STAGE ==="
                     npm install netlify-cli@20.1.1
-                    npx netlify --version
-                    echo "Deploying to production. Site ID: $NETLIFY_SITE_ID"
+                    node_modules/.bin/netlify --version
+                    echo "Deploying to Netlify site ID: $NETLIFY_SITE_ID"
+                    node_modules/.bin/netlify status
+                    node_modules/.bin/netlify deploy --dir=build --prod 
                 '''
             }
         }
     }
-}
-// pipeline {
+    
+    post {
+        always {
+            echo "Pipeline completed - check test results above"
+            // Archive all important artifacts
+            archiveArtifacts artifacts: 'build//*,test-results//*,playwright-report//*'
+        }
+        failure {
+            echo "Pipeline failed! Check the test results above. "
+        }
+        success {
+            echo "Pipeline succeeded! "
+        }
+    }
+}// pipeline {
 //     agent any
 
 //     environment {
